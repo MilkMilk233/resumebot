@@ -43,7 +43,7 @@
 </head>
 <body>
   <h1>Resume bot</h1>
-  <p>Enter the job link and hit the submit to let AI agent help polish and auto-submit your resume:</p>
+  <p>Enter the job link and hit submit to let the AI agent polish and auto-submit your resume:</p>
   <textarea id="inputBox" placeholder="Type your message..."></textarea><br />
   <button onclick="sendToLangflow()">Submit</button>
 
@@ -52,12 +52,12 @@
 
   <script>
     async function sendToLangflow() {
-      const input = document.getElementById("inputBox").value;
+      const input = document.getElementById("inputBox").value.trim();
       const output = document.getElementById("outputBox");
       output.textContent = "Loading... ⏳";
-  
+
       try {
-        const res = await fetch(
+        const response = await fetch(
           'https://us-central1-gen-lang-client-0376663310.cloudfunctions.net/langflow-proxy',
           {
             method: "POST",
@@ -65,40 +65,37 @@
             body: JSON.stringify({ input }),
           }
         );
-  
-        if (!res.ok) {
-          const errText = await res.text();
-          throw new Error(`HTTP ${res.status}: ${errText}`);
+
+        // Grab raw text no matter what
+        const raw = await response.text();
+
+        if (!response.ok) {
+          // HTTP error — show raw body
+          throw new Error(`HTTP ${response.status}: ${raw}`);
         }
-  
-        let data;
+
+        let message = raw;
+
+        // If it's JSON, try to extract the actual resume text
         try {
-          data = await res.json();
-        } catch (jsonErr) {
-          const raw = await res.text();
-          throw new Error(`Invalid JSON:\n${raw}`);
+          const data = JSON.parse(raw);
+          console.log("Full response data:", data);
+
+          const level2 = data.outputs?.[0]?.outputs?.[0];
+          message =
+            level2?.message ||
+            level2?.outputs?.message?.message ||
+            level2?.results?.message?.message ||
+            raw;
+
+          // strip ```text…``` fences if present
+          message = message
+            .replace(/^```(?:\w+)?\n/, "")
+            .replace(/\n```$/, "");
+        } catch {
+          // not JSON or missing fields → keep raw
         }
-  
-        console.log("Full response data:", data);
-  
-        // drill into the nested outputs arrays:
-        const level1 = data.outputs?.[0];
-        const level2 = level1?.outputs?.[0];
-  
-        // try a few places where the text might live
-        let message =
-          level2?.message ||
-          level2?.outputs?.message?.message ||
-          level2?.results?.message?.message;
-  
-        if (!message) {
-          output.textContent = "⚠️ Could not find a message in the response.";
-          return;
-        }
-  
-        // strip ```text…``` fences if present
-        message = message.replace(/^```(?:\w+)?\n/, "").replace(/\n```$/, "");
-  
+
         output.textContent = message;
       } catch (err) {
         output.textContent = "❌ Error:\n" + err.message;
@@ -106,8 +103,5 @@
       }
     }
   </script>
-  
-  
-  
 </body>
 </html>
